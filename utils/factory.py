@@ -4,8 +4,10 @@ from __future__ import print_function
 
 from core.envs.copy_env import CopyEnv
 from core.envs.repeat_copy_env import RepeatCopyEnv
+from core.envs.dummy_env import DummyEnv
 EnvDict = {"copy":        CopyEnv,
-           "repeat-copy": RepeatCopyEnv}
+           "repeat-copy": RepeatCopyEnv,
+           "dummy": DummyEnv}
 
 from core.circuits.ntm_circuit import NTMCircuit
 from core.circuits.dnc_circuit import DNCCircuit

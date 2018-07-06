@@ -119,7 +119,7 @@ class DynamicReadHead(DynamicHead):
         # content focus
         super(DynamicReadHead, self).forward(hidden_vb, memory_vb)
         # location focus
-        self.read_mode_vb = F.softmax(self.hid_2_read_mode(hidden_vb).view(-1, self.num_heads, self.num_read_modes).transpose(0, 2)).transpose(0, 2)
+        self.read_mode_vb = F.softmax(self.hid_2_read_mode(hidden_vb).view(-1, self.num_heads, self.num_read_modes), 2)
         self._location_focus(link_vb, num_write_heads)
         self.wl_prev_vb = self.wl_curr_vb
         # access

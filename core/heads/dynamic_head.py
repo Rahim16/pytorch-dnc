@@ -38,7 +38,8 @@ class DynamicHead(Head):
         """
         K_vb = batch_cosine_sim(self.key_vb, memory_vb)  # [batch_size x num_heads x mem_hei]
         self.wc_vb = K_vb * self.beta_vb.expand_as(K_vb) # [batch_size x num_heads x mem_hei]
-        self.wc_vb = F.softmax(self.wc_vb.transpose(0, 2)).transpose(0, 2)
+        # NOTE: modified the old version self.wc_vb = F.softmax(self.wc_vb.transpose(0, 2)).transpose(0, 2)
+        self.wc_vb = F.softmax(self.wc_vb, 2)
 
     def _location_focus(self):
         raise NotImplementedError("not implemented in base calss")

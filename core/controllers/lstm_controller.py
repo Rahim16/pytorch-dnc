@@ -20,6 +20,8 @@ class LSTMController(Controller):
         pass
 
     def forward(self, input_vb, read_vec_vb):
+        # print(input_vb.type())
+        # print(read_vec_vb.type())
         self.lstm_hidden_vb = self.in_2_hid(torch.cat((input_vb.contiguous().view(-1, self.input_dim),
                                                        read_vec_vb.contiguous().view(-1, self.read_vec_dim)), 1),
                                             self.lstm_hidden_vb)

@@ -13,7 +13,8 @@ CONFIGS = [
 # agent_type, env_type,      game, circuit_type
 [ "empty",    "repeat-copy", "",   "none"      ],  # 0
 [ "sl",       "copy",        "",   "ntm"       ],  # 1
-[ "sl",       "repeat-copy", "",   "dnc"       ]   # 2
+[ "sl",       "repeat-copy", "",   "dnc"       ],   # 2
+[ "sl",       "dummy", "",   "dnc"       ]
 ]
 
 class Params(object):   # NOTE: shared across all modules
@@ -21,15 +22,15 @@ class Params(object):   # NOTE: shared across all modules
         self.verbose     = 0            # 0(warning) | 1(info) | 2(debug)
 
         # training signature
-        self.machine     = "daim"       # "machine_id"
-        self.timestamp   = "17080800"   # "yymmdd##"
+        self.machine     = "gpu1"       # "machine_id"
+        self.timestamp   = "18070400"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
-        self.config      = 1 
+        self.config      = 3
 
         self.seed        = 1
         self.render      = False        # whether render the window from the original envs or not
-        self.visualize   = True         # whether do online plotting and stuff or not
+        self.visualize   = False         # whether do online plotting and stuff or not
         self.save_best   = False        # save model w/ highest reward if True, otherwise always save the latest model
 
         self.agent_type, self.env_type, self.game, self.circuit_type = CONFIGS[self.config]
@@ -77,6 +78,8 @@ class EnvParams(Params):    # settings for network architecture
             self.min_repeats   = 1
             self.max_repeats   = 2
             self.max_repeats_norm = 10.
+        elif self.env_type == "dummy":
+            self.input_file = "/amd/home/mammadli/repos/python_parrl/code_samples/dummy.pickled"
 
 class ControllerParams(Params):
     def __init__(self):
@@ -170,7 +173,7 @@ class AgentParams(Params):  # hyperparameters for drl agents
                 self.criteria       = nn.BCELoss()
                 self.optim          = optim.RMSprop
 
-                self.steps          = 100000    # max #iterations
+                self.steps          = 10    # max #iterations
                 self.batch_size     = 16
                 self.early_stop     = None      # max #steps per episode
                 self.clip_grad      = 50.
@@ -185,7 +188,7 @@ class AgentParams(Params):  # hyperparameters for drl agents
                 self.criteria       = nn.BCELoss()
                 self.optim          = optim.RMSprop
 
-                self.steps          = 100000    # max #iterations
+                self.steps          = 10    # max #iterations
                 self.batch_size     = 16
                 self.early_stop     = None      # max #steps per episode
                 self.clip_grad      = 50.
@@ -200,7 +203,7 @@ class AgentParams(Params):  # hyperparameters for drl agents
             self.criteria       = nn.BCELoss()
             self.optim          = optim.RMSprop
 
-            self.steps          = 100000    # max #iterations
+            self.steps          = 10    # max #iterations
             self.batch_size     = 16
             self.early_stop     = None      # max #steps per episode
             self.clip_grad      = 50.
