@@ -21,3 +21,5 @@ if opt.mode == 1:   # train
     agent.fit_model()
 elif opt.mode == 2: # test opt.model_file
     agent.test_model()
+elif opt.mode == 3:
+    agent.explore_model()

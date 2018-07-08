@@ -30,6 +30,7 @@ class SLAgent(Agent):   # for supervised learning tasks
         self.circuit = self.circuit_prototype(self.circuit_params)
         self._load_model(self.model_file)   # load pretrained circuit if provided
 
+        self.training = False # NOTE: maybe remove this, just added to avoid references to undefined in explore
         self._reset_experience()
 
     def _reset_training_loggings(self):
@@ -51,22 +52,16 @@ class SLAgent(Agent):   # for supervised learning tasks
 
         return state_ts
 
-    def _forward(self, observation):
-        # first we need to reset all the necessary states
-        self.circuit._reset_states()
-        # NOTE: we update the output_vb and target_vb here
-        input_ts = self._preprocessState(observation[0])
-        self.target_vb = Variable(self._preprocessState(observation[1]))
-        self.mask_ts   = self._preprocessState(observation[2]).expand_as(self.target_vb)
-        self.output_vb = None
+    def _forward_sequential(self, input_ts):
+        final_out = None
 
         for i in range(input_ts.size(0)):
             # feed in one row of the sequence per time
             output_vb = self.circuit.forward(Variable(input_ts[i]))
-            if self.output_vb is None:
-                self.output_vb = output_vb
+            if final_out is None:
+                final_out = output_vb
             else:
-                self.output_vb = torch.cat((self.output_vb, output_vb), 0)
+                final_out = torch.cat((final_out, output_vb), 0)
 
             # NOTE: this part is for examine the heads' weights and memory usage
             # NOTE: only used during testing, cos visualization takes time
@@ -74,9 +69,30 @@ class SLAgent(Agent):   # for supervised learning tasks
                 self.env.visual(input_ts[i,0,:].unsqueeze(0).unsqueeze(1),
                                 self.target_vb.data[i,0,:].unsqueeze(0).unsqueeze(1),
                                 self.mask_ts[i,0,:].unsqueeze(0).unsqueeze(1),
-                                self.output_vb.data[i,0,:].unsqueeze(0).unsqueeze(1))
+                                final_out.data[i,0,:].unsqueeze(0).unsqueeze(1))
                 self.circuit.accessor.visual()
                 raw_input()
+
+        return final_out
+
+    def _forward(self, observation, verbose=False):
+        # first we need to reset all the necessary states
+        self.circuit._reset_states()
+        # NOTE: we update the output_vb and target_vb here
+        input_ts = self._preprocessState(observation[0])
+        self.target_vb = Variable(self._preprocessState(observation[1]))
+        self.mask_ts   = self._preprocessState(observation[2]).expand_as(self.target_vb)
+
+        # NOTE: maybe come up with something better than hard-wiring circuit name
+        if self.circuit_params.circuit_type == "bidnc":
+            self.output_vb = self.circuit.forward(input_ts)
+        else:
+            self.output_vb = self._forward_sequential(input_ts)
+
+        if verbose:
+            print("Input: \n{}".format(input_ts.squeeze()))
+            print("Expected: \n{}".format(self.target_vb.squeeze()))
+            print("Predicted: \n{}".format(self.output_vb.squeeze().round()))
 
         if not self.training and self.visualize:
             self.env.visual(input_ts, self.target_vb.data, self.mask_ts, self.output_vb.data)
@@ -157,13 +173,13 @@ class SLAgent(Agent):   # for supervised learning tasks
         while eval_step < self.eval_steps:
             if eval_should_start_new:
                 self._reset_experience()
-                self.experience = self.env.reset()
+                self.experience = self.env.reset_for_eval()
                 assert self.experience.state1 is not None
                 # if self.visualize: self.env.visual()
                 # if self.render: self.env.render()
                 eval_should_start_new = False
             eval_action = self._forward(self.experience.state1)
-            self.experience = self.env.step(eval_action)
+            self.experience = self.env.step_eval(eval_action)
             if self.experience.terminal1:# or self.early_stop and (episode_steps + 1) >= self.early_stop:
                 eval_should_start_new = True
 
@@ -220,3 +236,20 @@ class SLAgent(Agent):   # for supervised learning tasks
         # logging
         self.logger.warning("Testing  Took: " + str(time.time() - self.start_time))
         self.logger.warning("Iteration: {}; loss_avg: {}".format(self.step, self.loss_avg_log[-1][1]))
+
+    def explore_model(self):
+        self.logger.warning("<===================================> Exploring ...")
+        self.start_time = time.time()
+
+        explored = 0
+        self._reset_experience()
+        self.experience = self.env.reset_for_eval()
+        assert self.experience.state1 is not None
+
+        while explored < self.test_nepisodes:
+            eval_action = self._forward(self.experience.state1, verbose=True)
+            self.experience = self.env.step_eval(eval_action)
+            # calculate loss
+            eval_loss = self._backward()
+            print("Loss:{}".format(eval_loss))
+            explored += 1

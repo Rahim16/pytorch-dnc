@@ -11,9 +11,11 @@ EnvDict = {"copy":        CopyEnv,
 
 from core.circuits.ntm_circuit import NTMCircuit
 from core.circuits.dnc_circuit import DNCCircuit
+from core.circuits.bidnc_circuit import BiDNCCircuit
 CircuitDict = {"none": None,
                "ntm":  NTMCircuit,  # lstm_controller + static_accessor
-               "dnc":  DNCCircuit}  # lstm_controller + dynamic_accessor
+               "dnc":  DNCCircuit,  # lstm_controller + dynamic_accessor
+               "bidnc": BiDNCCircuit} # 2 * lstm_controller + dynamic_accessor
 
 from core.agents.empty_agent import EmptyAgent
 from core.agents.sl_agent    import SLAgent

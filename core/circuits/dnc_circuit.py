@@ -3,11 +3,11 @@ from __future__ import division
 from __future__ import print_function
 import torch.nn as nn
 
-from core.circuit import Circuit
+from core.circuits.fw_circuit import FW_Circuit
 from core.controllers.lstm_controller import LSTMController as Controller
 from core.accessors.dynamic_accessor import DynamicAccessor as Accessor
 
-class DNCCircuit(Circuit):
+class DNCCircuit(FW_Circuit):
     def __init__(self, args):
         super(DNCCircuit, self).__init__(args)
 

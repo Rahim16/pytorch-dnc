@@ -2,3 +2,5 @@
 ./core/*.pyc
 ./core/*/*.pyc
 ./utils/*.pyc
+.DS_Store
+._.DS_Store

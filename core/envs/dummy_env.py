@@ -24,6 +24,8 @@ class DummyEnv(Env):
         self.dev_dataset = data_utils.TensorDataset(self.dev_x, self.dev_y)
         self.train_data_loader = data_utils.DataLoader(self.train_dataset, batch_size=self.batch_size,
                             shuffle=False, num_workers=4, pin_memory=True)
+        self.dev_data_loader = data_utils.DataLoader(self.dev_dataset, batch_size=self.batch_size,
+            shuffle=True, num_workers=4, pin_memory=True)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
@@ -83,45 +85,29 @@ class DummyEnv(Env):
     def sample_random_action(self):
         pass
 
-    def _generate_sequence(self):
-        """
-        generates [batch_size x num_words x len_word] data and
-        prepare input & target & mask
-
-        Returns:
-        exp_state1[0] (input) : starts w/ a start bit, then the seq to be copied
-                              : then an end bit, then 0's
-            [0 ... 0, 1, 0;   # start bit
-             data   , 0, 0;   # data with padded 0's
-             0 ... 0, 0, 1;   # end bit
-             0 ......... 0]   # num_words   rows of 0's
-        exp_state1[1] (target): 0's until after inputs has the end bit, then the
-                              : seq to be copied, but w/o the extra channels for
-                              : tart and end bits
-            [0 ... 0;         # num_words+2 rows of 0's
-             data   ]         # data
-        exp_state1[2] (mask)  : 1's for all row corresponding to the target
-                              : 0's otherwise}
-            [0;               # num_words+2 rows of 0's
-             1];              # num_words rows of 1's
-        NOTE: we pad extra rows of 0's to the end of those batches with smaller
-        NOTE: length to make sure each sample in one batch has the same length
-        """
+    def _generate_sequence(self, train=True):
         self.exp_state1 = []
 
-        for sample_batched in self.train_data_loader:
+        data_loader = self.train_data_loader if train else self.dev_data_loader
+        for sample_batched in data_loader:
             x, y = sample_batched[0].to(self.device), sample_batched[1].to(self.device)
             self.exp_state1.append(x)
             self.exp_state1.append(y)
             self.exp_state1.append(torch.ones_like(y))
             return
 
-    def reset(self):
+    def reset(self, train=True):
         self._reset_experience()
-        self._generate_sequence()
+        self._generate_sequence(train)
         return self._get_experience()
 
-    def step(self, action_index):
+    def step(self, action_index, train=True):
         self.exp_action = action_index
-        self._generate_sequence()
+        self._generate_sequence(train)
         return self._get_experience()
+
+    def reset_for_eval(self):
+        return self.reset(train=False)
+
+    def step_eval(self, action_index):
+        return self.step(action_index, train=False)

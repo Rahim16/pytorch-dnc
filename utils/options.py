@@ -13,8 +13,9 @@ CONFIGS = [
 # agent_type, env_type,      game, circuit_type
 [ "empty",    "repeat-copy", "",   "none"      ],  # 0
 [ "sl",       "copy",        "",   "ntm"       ],  # 1
-[ "sl",       "repeat-copy", "",   "dnc"       ],   # 2
-[ "sl",       "dummy", "",   "dnc"       ]
+[ "sl",       "repeat-copy", "",   "dnc"       ],  # 2
+[ "sl",       "dummy",       "",   "dnc"       ],  # 3
+[ "sl",       "dummy",       "",   "bidnc"     ],  # 4
 ]
 
 class Params(object):   # NOTE: shared across all modules
@@ -25,8 +26,8 @@ class Params(object):   # NOTE: shared across all modules
         self.machine     = "gpu1"       # "machine_id"
         self.timestamp   = "18070400"   # "yymmdd##"
         # training configuration
-        self.mode        = 1            # 1(train) | 2(test model_file)
-        self.config      = 3
+        self.mode        = 1            # 1(train) | 2(test model_file) | 3 explore
+        self.config      = 4
 
         self.seed        = 1
         self.render      = False        # whether render the window from the original envs or not
@@ -46,8 +47,8 @@ class Params(object):   # NOTE: shared across all modules
         # NOTE: will save the current model to model_name
         self.model_name  = self.root_dir + "/models/" + self.refs + ".pth"
         # NOTE: will load pretrained model_file if not None
-        self.model_file  = None#self.root_dir + "/models/{TODO:FILL_IN_PRETAINED_MODEL_FILE}.pth"
-        if self.mode == 2:
+        self.model_file  = self.root_dir + "/models/" + "ast_model.pth" #self.root_dir + "/models/{TODO:FILL_IN_PRETAINED_MODEL_FILE}.pth"
+        if self.mode in [2, 3]:
             self.model_file  = self.model_name  # NOTE: so only need to change self.mode to 2 to test the current training
             assert self.model_file is not None, "Pre-Trained model is None, Testing aborted!!!"
             self.refs = self.refs + "_test"     # NOTE: using this as env for visdom for testing, to avoid accidentally redraw on the training plots
@@ -79,7 +80,8 @@ class EnvParams(Params):    # settings for network architecture
             self.max_repeats   = 2
             self.max_repeats_norm = 10.
         elif self.env_type == "dummy":
-            self.input_file = "/amd/home/mammadli/repos/python_parrl/code_samples/dummy.pickled"
+            # self.input_file = "/amd/home/mammadli/repos/python_parrl/code_samples/dummy.pickled"
+            self.input_file = "/amd/home/mammadli/repos/python_parrl/code_samples/data.pickled"
 
 class ControllerParams(Params):
     def __init__(self):
@@ -111,7 +113,7 @@ class WriteHeadParams(HeadParams):
 class ReadHeadParams(HeadParams):
     def __init__(self):
         super(ReadHeadParams, self).__init__()
-        if self.circuit_type == "dnc":
+        if self.circuit_type in ["dnc", "bidnc"]:
             self.num_read_modes = None
 
 class MemoryParams(Params):
@@ -153,7 +155,7 @@ class CircuitParams(Params):# settings for network architecture
             self.mem_hei         = 128
             self.mem_wid         = 20
             self.clip_value      = 20.   # clips controller and circuit output values to in between
-        elif self.circuit_type == "dnc":
+        elif self.circuit_type in ["dnc", "bidnc"]:
             self.hidden_dim      = 64
             self.num_write_heads = 1
             self.num_read_heads  = 4
@@ -173,7 +175,7 @@ class AgentParams(Params):  # hyperparameters for drl agents
                 self.criteria       = nn.BCELoss()
                 self.optim          = optim.RMSprop
 
-                self.steps          = 10    # max #iterations
+                self.steps          = 1000    # max #iterations
                 self.batch_size     = 16
                 self.early_stop     = None      # max #steps per episode
                 self.clip_grad      = 50.
@@ -184,26 +186,26 @@ class AgentParams(Params):  # hyperparameters for drl agents
                 self.eval_steps     = 50
                 self.prog_freq      = self.eval_freq
                 self.test_nepisodes = 5
-            elif self.circuit_type == "dnc":
+            elif self.circuit_type in ["dnc", "bidnc"]:
                 self.criteria       = nn.BCELoss()
                 self.optim          = optim.RMSprop
 
-                self.steps          = 10    # max #iterations
-                self.batch_size     = 16
+                self.steps          = 1000    # max #iterations
+                self.batch_size     = 200 if self.mode != 3 else 1
                 self.early_stop     = None      # max #steps per episode
                 self.clip_grad      = 50.
                 self.lr             = 1e-4
                 self.optim_eps      = 1e-10     # NOTE: we use this setting to be equivalent w/ the default settings in tensorflow
                 self.optim_alpha    = 0.9       # NOTE: only for rmsprop, alpha is the decay in tensorflow, whose default is 0.9
-                self.eval_freq      = 500
-                self.eval_steps     = 50
+                self.eval_freq      = 25
+                self.eval_steps     = 5
                 self.prog_freq      = self.eval_freq
-                self.test_nepisodes = 5
+                self.test_nepisodes = 15
         elif self.agent_type == "empty":
             self.criteria       = nn.BCELoss()
             self.optim          = optim.RMSprop
 
-            self.steps          = 10    # max #iterations
+            self.steps          = 1000    # max #iterations
             self.batch_size     = 16
             self.early_stop     = None      # max #steps per episode
             self.clip_grad      = 50.

@@ -70,6 +70,12 @@ class Env(object):
     def step(self, action):
         raise NotImplementedError("not implemented in base calss")
 
+    def reset_for_eval(self):
+        return self.reset()
+
+    def step_eval(self, action_index):
+        return self.step(action_index)
+
 class GymEnv(Env):  # low dimensional observations
     def __init__(self, args, env_ind=0):
         super(GymEnv, self).__init__(args, env_ind)
