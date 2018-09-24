@@ -73,6 +73,6 @@ class BI_Circuit(Circuit):   # NOTE: basically this whole module is treated as a
                                                    controller_outputs[back_idx].view(-1, self.hidden_dim),
                                                    read_vectors[back_idx].view(-1, self.read_vec_dim)), 1))
 
-            outputs.append(F.sigmoid(torch.clamp(output_vb, min=-self.clip_value, max=self.clip_value)).view(1, self.batch_size, self.output_dim))
+            outputs.append(torch.sigmoid(torch.clamp(output_vb, min=-self.clip_value, max=self.clip_value)).view(1, self.batch_size, self.output_dim))
 
         return torch.stack(outputs)

@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 from core.head import Head
-from utils.similarities import batch_cosine_sim
+from utils.similarities import batch_cosine_sim, batch_cosine_sim_pre_norm
 
 class DynamicHead(Head):
     def __init__(self, args):
@@ -36,6 +36,7 @@ class DynamicHead(Head):
             wc_vb:     [batch_size x num_heads x mem_hei]
                     -> the attention weight by content focus
         """
+        self.similarities = batch_cosine_sim_pre_norm(self.key_vb, memory_vb)
         K_vb = batch_cosine_sim(self.key_vb, memory_vb)  # [batch_size x num_heads x mem_hei]
         self.wc_vb = K_vb * self.beta_vb.expand_as(K_vb) # [batch_size x num_heads x mem_hei]
         # NOTE: modified the old version self.wc_vb = F.softmax(self.wc_vb.transpose(0, 2)).transpose(0, 2)
@@ -49,7 +50,7 @@ class DynamicHead(Head):
         # NOTE: to be consistent w/ the dnc paper, we use
         # NOTE: sigmoid to constrain to [0, 1]
         # NOTE: oneplus to constrain to [1, +inf]
-        self.key_vb   = F.tanh(self.hid_2_key(hidden_vb)).view(-1, self.num_heads, self.mem_wid)    # TODO: relu to bias the memory to store positive values ??? check again
+        self.key_vb   = torch.tanh(self.hid_2_key(hidden_vb)).view(-1, self.num_heads, self.mem_wid)    # TODO: relu to bias the memory to store positive values ??? check again
         self.beta_vb  = F.softplus(self.hid_2_beta(hidden_vb)).view(-1, self.num_heads, 1)          # beta >=1: https://github.com/deepmind/dnc/issues/9
 
         # now we compute the addressing mechanism

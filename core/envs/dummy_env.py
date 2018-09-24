@@ -2,32 +2,29 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import numpy as np
-from random import randint
+import random
 import torch
-import torch.utils.data as data_utils
-import sys
+import math
+import torch.nn.functional as F
 
 from core.env import Env
-from utils.helpers import read_data_file
+from core.envs.interfaces import Measurable
 
-class DummyEnv(Env):
+class DummyEnv(Env, Measurable):
     def __init__(self, args, env_ind=0):
         super(DummyEnv, self).__init__(args, env_ind)
 
-        # state space setup
         self.batch_size = args.batch_size
-
-        self.data = read_data_file(args.input_file)
-
-        self.train_x, self.train_y, self.dev_x, self.dev_y = self.data["train_x"], self.data["train_y"], self.data["dev_x"], self.data["dev_y"]
-        self.train_dataset = data_utils.TensorDataset(self.train_x, self.train_y)
-        self.dev_dataset = data_utils.TensorDataset(self.dev_x, self.dev_y)
-        self.train_data_loader = data_utils.DataLoader(self.train_dataset, batch_size=self.batch_size,
-                            shuffle=False, num_workers=4, pin_memory=True)
-        self.dev_data_loader = data_utils.DataLoader(self.dev_dataset, batch_size=self.batch_size,
-            shuffle=True, num_workers=4, pin_memory=True)
+        self.sequence_length = args.sequence_length
+        self.range_min = args.range_min
+        self.range_max = args.range_max
+        self.separate_command = args.separate_command
+        self.flag_errors = args.flag_errors
+        self.mask_outputs = args.mask_outputs
+        self.one_hot_encode = args.one_hot_encode
+        self.many_hot_encode = args.many_hot_encode
+        self.nums_to_one_hot = {} # cache
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
 
 
     def _preprocessState(self, state):
@@ -38,17 +35,23 @@ class DummyEnv(Env):
             state[i] = state[i].permute(1, 0, 2)
         return state
 
-    # this is just size of the input
     @property
     def state_shape(self):
         # NOTE: we use this as the input_dim to be consistent with the sl & rl tasks
-        return self.train_x.shape[-1]
+        index_shift = 2 if self.separate_command else 1
+        input_width = 2
 
-    # output_size
+        if self.one_hot_encode:
+            input_width = index_shift + self.range_max - self.range_min + 1
+        elif self.many_hot_encode:
+            input_width = index_shift + int(math.ceil(math.log(self.range_max - self.range_min + 1, 2)))
+
+        return input_width
+
     @property
     def action_dim(self):
         # NOTE: we use this as the output_dim to be consistent with the sl & rl tasks
-        return self.train_y.shape[-1]
+        return 1
 
     def render(self):
         pass
@@ -85,16 +88,124 @@ class DummyEnv(Env):
     def sample_random_action(self):
         pass
 
-    def _generate_sequence(self, train=True):
-        self.exp_state1 = []
+    def generate_dataset(self, range_min, range_max):
+        index_shift = 2 if self.separate_command else 1 # sequences are twice longer when putting command on another line
+        sample_length = self.sequence_length * index_shift
 
-        data_loader = self.train_data_loader if train else self.dev_data_loader
-        for sample_batched in data_loader:
-            x, y = sample_batched[0].to(self.device), sample_batched[1].to(self.device)
-            self.exp_state1.append(x)
-            self.exp_state1.append(y)
-            self.exp_state1.append(torch.ones_like(y))
-            return
+        x = torch.zeros((self.batch_size, sample_length, 2))
+        y = torch.zeros((self.batch_size, sample_length, 1))
+
+        mask = (torch.zeros if self.mask_outputs else torch.ones)((self.batch_size, sample_length, 1))
+
+
+        for sample_id in range(self.batch_size):
+            pool = []
+            for t in np.asarray(range(self.sequence_length)) * index_shift:
+                idx_val = t + index_shift - 1 # next row if shift required
+                save_op = random.random() < .5
+                error = random.random() < .5
+                if save_op or not pool:
+                    new_num = random.randint(range_min, range_max)
+                    pool.append(new_num)
+                    x[sample_id][idx_val][1] = new_num
+                else:
+                    x[sample_id][t][0] = 1 # read operation
+                    if self.mask_outputs:
+                        mask[sample_id][idx_val][0] = 1 # only this output is important
+                    if error:
+                        while True:
+                            err_num = random.randint(range_min, range_max)
+                            if err_num not in pool:
+                                break
+
+                        x[sample_id][idx_val][1] = err_num
+                        y[sample_id][idx_val][0] = 1 if self.flag_errors else 0 # error flag
+                    else:
+                        saved_num = random.choice(pool)
+                        x[sample_id][idx_val][1] = saved_num
+                        y[sample_id][idx_val][0] = 0 if self.flag_errors else 1 # correct flag
+
+        return x, y, mask
+
+    def num_to_many_hot(self, number, bit_length):
+        if number not in self.nums_to_one_hot:
+            many_hot = torch.zeros(bit_length)
+
+
+            i = 0
+            while number > 0:
+                many_hot[i] = number % 2
+                i += 1
+                number //= 2
+
+            self.nums_to_one_hot[number] = many_hot
+
+        return self.nums_to_one_hot[number]
+
+
+
+    # convert the tensor's value to many hot representation
+    # TODO: MAYBE add support for separate_command flag
+    def to_many_hot(self, tensor_x, range_min, range_max):
+        index_shift = 2 if self.separate_command else 1 # sequences are twice longer when putting command on another line
+        bit_length = int(math.ceil(math.log(range_max - range_min + 1, 2)))
+        prefix_length = 2 if self.separate_command else 1 # different commands on separate rows
+
+        tensor_padded = torch.zeros((tensor_x.size(0), tensor_x.size(1), prefix_length + bit_length)).to(self.device)
+        if not self.separate_command:
+            tensor_padded[:, :, 0] = tensor_x[:, :, 0]
+
+        for sample_id in range(tensor_x.size(0)):
+            rang = range(tensor_x.size(1))
+            if self.separate_command:
+                rang = filter(lambda x: x % 2, rang)
+
+            for input_t in rang:
+                if self.separate_command:
+                    tensor_padded[sample_id, input_t - 1, int(tensor_x[sample_id, input_t - 1, 0])] = 1 # command bit
+
+                tensor_padded[sample_id, input_t, prefix_length:] = \
+                   self.num_to_many_hot(int(tensor_x[sample_id, input_t, 1]), bit_length)
+
+        return tensor_padded
+
+    def to_one_hot(self, tensor_x, range_min, range_max, encoding_length=-1):
+        index_shift = 2 if self.separate_command else 1 # sequences are twice longer when putting command on another line
+        bit_length = max(range_max - range_min + 1, encoding_length)
+        prefix_length = 2 if self.separate_command else 1 # different commands on separate rows
+
+        tensor_padded = torch.zeros((tensor_x.size(0), tensor_x.size(1), prefix_length + bit_length)).to(self.device)
+
+
+        if not self.separate_command:
+            tensor_padded[:, :, 0] = tensor_x[:, :, 0]
+
+        for sample_id in range(tensor_x.size(0)):
+            rang = range(tensor_x.size(1))
+            if self.separate_command:
+                rang = filter(lambda x: x % 2, rang)
+
+            for input_t in rang:
+                if self.separate_command:
+                    tensor_padded[sample_id, input_t - 1, int(tensor_x[sample_id, input_t - 1, 0])] = 1 # command bit
+
+                tensor_padded[sample_id, input_t, int(tensor_x[sample_id, input_t, 1]) - range_min + prefix_length] = 1
+
+        return tensor_padded
+
+
+    def _generate_sequence(self, train=True):
+        # range_min = self.range_min if train else self.range_max + 1
+        # range_max = self.range_max if train else self.range_max * 2
+        range_min = self.range_min
+        range_max = self.range_max
+        self.exp_state1 = [data.to(self.device) for data in self.generate_dataset(range_min, range_max)]
+
+        if self.one_hot_encode:
+            self.exp_state1[0] = self.to_one_hot(self.exp_state1[0], range_min, range_max)
+        elif self.many_hot_encode:
+            self.exp_state1[0] = self.to_many_hot(self.exp_state1[0], range_min, range_max)
+
 
     def reset(self, train=True):
         self._reset_experience()
@@ -111,3 +222,8 @@ class DummyEnv(Env):
 
     def step_eval(self, action_index):
         return self.step(action_index, train=False)
+
+    def measure_error(self, true_y, predicted_y, mask):
+        diff = torch.round(torch.abs(true_y - torch.round(predicted_y)) * mask)
+        return { "total": diff.size(0), \
+                 "errors": int(torch.sum(F.max_pool1d(diff, diff.size(-1))).item())}

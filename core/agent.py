@@ -65,7 +65,13 @@ class Agent(object):
     def _load_model(self, model_file):
         if model_file:
             self.logger.warning("Loading Model: " + self.model_file + " ...")
+            print(model_file)
             self.circuit.load_state_dict(torch.load(model_file))
+            # for name, param in self.circuit.named_parameters():
+            #     if param.requires_grad:
+            #         print(name)
+            #         print(param.data.shape)
+            #         print(param.data)
             self.logger.warning("Loaded  Model: " + self.model_file + " ...")
         else:
             self.logger.warning("No Pretrained Model. Will Train From Scratch.")

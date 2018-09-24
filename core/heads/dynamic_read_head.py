@@ -45,7 +45,7 @@ class DynamicReadHead(DynamicHead):
         returns:
             usage_vb:      [batch_size x mem_hei]
         """
-        self.free_gate_vb = F.sigmoid(self.hid_2_free_gate(hidden_vb)).view(-1, self.num_heads, 1)
+        self.free_gate_vb = torch.sigmoid(self.hid_2_free_gate(hidden_vb)).view(-1, self.num_heads, 1)
         free_read_weights_vb = self.free_gate_vb.expand_as(self.wl_prev_vb) * self.wl_prev_vb
         psi_vb = torch.prod(1. - free_read_weights_vb, 1)
         return prev_usage_vb * psi_vb

@@ -10,6 +10,7 @@ import torch.nn.functional as F
 
 from utils.helpers import Experience
 from core.agent import Agent
+from core.envs.interfaces import Measurable
 
 class SLAgent(Agent):   # for supervised learning tasks
     def __init__(self, args, env_prototype, circuit_prototype):
@@ -29,6 +30,9 @@ class SLAgent(Agent):   # for supervised learning tasks
         self.circuit_params.output_dim = self.action_dim
         self.circuit = self.circuit_prototype(self.circuit_params)
         self._load_model(self.model_file)   # load pretrained circuit if provided
+
+        # to calculate the error rate in percentages
+        self._reset_error_metrics()
 
         self.training = False # NOTE: maybe remove this, just added to avoid references to undefined in explore
         self._reset_experience()
@@ -93,11 +97,21 @@ class SLAgent(Agent):   # for supervised learning tasks
             print("Input: \n{}".format(input_ts.squeeze()))
             print("Expected: \n{}".format(self.target_vb.squeeze()))
             print("Predicted: \n{}".format(self.output_vb.squeeze().round()))
+            print("Mask: \n{}".format(self.mask_ts.squeeze()))
+
+        if isinstance(self.env, Measurable):
+            stats = self.env.measure_error(self.target_vb.permute(1, 0, 2), self.output_vb.permute(1, 0, 2), self.mask_ts.permute(1, 0, 2))
+            self.total_samples += stats["total"]
+            self.incorrect_samples += stats["errors"]
 
         if not self.training and self.visualize:
             self.env.visual(input_ts, self.target_vb.data, self.mask_ts, self.output_vb.data)
 
         return 0    # for all the supervised tasks we just return a 0 to keep the same format as rl
+
+    def _reset_error_metrics(self):
+        self.total_samples = 0
+        self.incorrect_samples = 0
 
     def _backward(self):
         # TODO: we need to have a custom loss function to take mask into account
@@ -126,6 +140,7 @@ class SLAgent(Agent):   # for supervised learning tasks
         self.step = 0
 
         should_start_new = True
+        self._reset_error_metrics()
         while self.step < self.steps:
             if should_start_new:
                 self._reset_experience()
@@ -147,6 +162,8 @@ class SLAgent(Agent):   # for supervised learning tasks
             if self.step % self.prog_freq == 0:
                 self.logger.warning("Reporting       @ Step: " + str(self.step) + " | Elapsed Time: " + str(time.time() - self.start_time))
                 self.logger.warning("Training Stats:   avg_loss:         {}".format(np.mean(np.asarray(self.training_loss_avg_log))))
+                if isinstance(self.env, Measurable):
+                    self.log_metrics()
 
             # evaluation & checkpointing
             if self.step % self.eval_freq == 0:
@@ -170,6 +187,7 @@ class SLAgent(Agent):   # for supervised learning tasks
 
         eval_loss_avg_log = []
         eval_should_start_new = True
+        self._reset_error_metrics()
         while eval_step < self.eval_steps:
             if eval_should_start_new:
                 self._reset_experience()
@@ -197,9 +215,15 @@ class SLAgent(Agent):   # for supervised learning tasks
         # logging
         self.logger.warning("Evaluation        Took: " + str(time.time() - eval_start_time))
         self.logger.warning("Iteration: {}; loss_avg: {}".format(self.step, self.loss_avg_log[-1][1]))
+        if isinstance(self.env, Measurable):
+            self.log_metrics()
 
         # save model
         self._save_model(self.step, 0.) # TODO: here should pass in the negative loss
+
+    def log_metrics(self):
+        error_percentage = float(self.incorrect_samples) * 100 / self.total_samples
+        self.logger.warning("Misprediction rate: {:.2f}%   Total Samples: {}    Mispredicted: {}".format(error_percentage, self.total_samples, self.incorrect_samples))
 
     def test_model(self):
         self.logger.warning("<===================================> Testing ...")
@@ -211,6 +235,7 @@ class SLAgent(Agent):   # for supervised learning tasks
 
         test_loss_avg_log = []
         test_should_start_new = True
+        self._reset_error_metrics()
         while self.step < self.test_nepisodes:
             if test_should_start_new:
                 self._reset_experience()
@@ -236,6 +261,8 @@ class SLAgent(Agent):   # for supervised learning tasks
         # logging
         self.logger.warning("Testing  Took: " + str(time.time() - self.start_time))
         self.logger.warning("Iteration: {}; loss_avg: {}".format(self.step, self.loss_avg_log[-1][1]))
+        if isinstance(self.env, Measurable):
+            self.log_metrics()
 
     def explore_model(self):
         self.logger.warning("<===================================> Exploring ...")
@@ -246,10 +273,11 @@ class SLAgent(Agent):   # for supervised learning tasks
         self.experience = self.env.reset_for_eval()
         assert self.experience.state1 is not None
 
+
+
         while explored < self.test_nepisodes:
             eval_action = self._forward(self.experience.state1, verbose=True)
             self.experience = self.env.step_eval(eval_action)
             # calculate loss
             eval_loss = self._backward()
-            print("Loss:{}".format(eval_loss))
             explored += 1

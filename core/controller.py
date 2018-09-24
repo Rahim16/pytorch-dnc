@@ -27,6 +27,7 @@ class Controller(nn.Module):
         self.mem_hei = args.mem_hei
         self.mem_wid = args.mem_wid
         self.clip_value = args.clip_value
+        self.depth = args.depth
 
     def _init_weights(self):
         raise NotImplementedError("not implemented in base calss")
@@ -37,8 +38,9 @@ class Controller(nn.Module):
 
     def _reset_states(self):
         # we reset controller's hidden state
-        self.lstm_hidden_vb = (Variable(self.lstm_hidden_ts[0]).type(self.dtype),
-                               Variable(self.lstm_hidden_ts[1]).type(self.dtype))
+        self.lstm_hidden_vb = [[Variable(self.lstm_hidden_ts[l][0]).type(self.dtype), \
+                                Variable(self.lstm_hidden_ts[l][1]).type(self.dtype)] for l in range(self.depth)]
+
 
     def _reset(self):           # NOTE: should be called at each child's __init__
         self._init_weights()
@@ -46,8 +48,12 @@ class Controller(nn.Module):
         self.print_model()
         # reset internal states
         self.lstm_hidden_ts = []
-        self.lstm_hidden_ts.append(torch.zeros(self.batch_size, self.hidden_dim))
-        self.lstm_hidden_ts.append(torch.zeros(self.batch_size, self.hidden_dim))
+        for l in range(self.depth):
+            ts_l = []
+            ts_l.append(torch.zeros(self.batch_size, self.hidden_dim))
+            ts_l.append(torch.zeros(self.batch_size, self.hidden_dim))
+            self.lstm_hidden_ts.append(ts_l)
+
         self._reset_states()
 
     def forward(self, input_vb):

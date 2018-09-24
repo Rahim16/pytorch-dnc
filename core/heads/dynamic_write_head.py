@@ -136,13 +136,13 @@ class DynamicWriteHead(DynamicHead):
         # content focus
         super(DynamicWriteHead, self).forward(hidden_vb, memory_vb)
         # location focus
-        self.alloc_gate_vb = F.sigmoid(self.hid_2_alloc_gate(hidden_vb)).view(-1, self.num_heads, 1)
-        self.write_gate_vb = F.sigmoid(self.hid_2_write_gate(hidden_vb)).view(-1, self.num_heads, 1)
+        self.alloc_gate_vb = torch.sigmoid(self.hid_2_alloc_gate(hidden_vb)).view(-1, self.num_heads, 1)
+        self.write_gate_vb = torch.sigmoid(self.hid_2_write_gate(hidden_vb)).view(-1, self.num_heads, 1)
         self._location_focus(usage_vb)
         self.wl_prev_vb = self.wl_curr_vb
         # access
-        self.erase_vb = F.sigmoid(self.hid_2_erase(hidden_vb)).view(-1, self.num_heads, self.mem_wid)
-        self.add_vb   = F.tanh(self.hid_2_add(hidden_vb)).view(-1, self.num_heads, self.mem_wid)
+        self.erase_vb = torch.sigmoid(self.hid_2_erase(hidden_vb)).view(-1, self.num_heads, self.mem_wid)
+        self.add_vb   = torch.tanh(self.hid_2_add(hidden_vb)).view(-1, self.num_heads, self.mem_wid)
         return self._access(memory_vb)
 
     def _update_link(self, prev_link_vb, prev_preced_vb):

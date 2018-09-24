@@ -65,5 +65,6 @@ class DynamicAccessor(Accessor):
         # 3. then we update the temporal link
         self.link_vb, self.preced_vb = self.write_heads._temporal_link(self.link_vb, self.preced_vb)
         # 4. then read from memory_{t} to get read_vec_{t}
+        # print(torch.round(self.memory.memory_vb))
         read_vec_vb = self.read_heads.forward(hidden_vb, self.memory.memory_vb, self.link_vb, self.write_head_params.num_heads)
         return read_vec_vb

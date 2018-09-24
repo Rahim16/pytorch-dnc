@@ -16,6 +16,7 @@ CONFIGS = [
 [ "sl",       "repeat-copy", "",   "dnc"       ],  # 2
 [ "sl",       "dummy",       "",   "dnc"       ],  # 3
 [ "sl",       "dummy",       "",   "bidnc"     ],  # 4
+[ "sl",       "dummy",       "",   "fdnc"      ],  # 5
 ]
 
 class Params(object):   # NOTE: shared across all modules
@@ -24,10 +25,10 @@ class Params(object):   # NOTE: shared across all modules
 
         # training signature
         self.machine     = "gpu1"       # "machine_id"
-        self.timestamp   = "18070400"   # "yymmdd##"
+        self.timestamp   = "18072300"   # "yymmdd##"
         # training configuration
-        self.mode        = 1            # 1(train) | 2(test model_file) | 3 explore
-        self.config      = 4
+        self.mode        = 2            # 1(train) | 2(test model_file) | 3 explore
+        self.config      = 5
 
         self.seed        = 1
         self.render      = False        # whether render the window from the original envs or not
@@ -47,7 +48,8 @@ class Params(object):   # NOTE: shared across all modules
         # NOTE: will save the current model to model_name
         self.model_name  = self.root_dir + "/models/" + self.refs + ".pth"
         # NOTE: will load pretrained model_file if not None
-        self.model_file  = self.root_dir + "/models/" + "ast_model.pth" #self.root_dir + "/models/{TODO:FILL_IN_PRETAINED_MODEL_FILE}.pth"
+        self.model_file  = None #self.root_dir + "/models/" + "dummy_model.pth" #self.root_dir + "/models/{TODO:FILL_IN_PRETAINED_MODEL_FILE}.pth"
+
         if self.mode in [2, 3]:
             self.model_file  = self.model_name  # NOTE: so only need to change self.mode to 2 to test the current training
             assert self.model_file is not None, "Pre-Trained model is None, Testing aborted!!!"
@@ -79,9 +81,18 @@ class EnvParams(Params):    # settings for network architecture
             self.min_repeats   = 1
             self.max_repeats   = 2
             self.max_repeats_norm = 10.
+        elif self.env_type == "data-loader":
+            self.input_file = "/amd/home/mammadli/repos/python_parrl/code_samples/dummy.pickled"
         elif self.env_type == "dummy":
-            # self.input_file = "/amd/home/mammadli/repos/python_parrl/code_samples/dummy.pickled"
-            self.input_file = "/amd/home/mammadli/repos/python_parrl/code_samples/data.pickled"
+            self.sequence_length = 8
+            self.range_min = 1
+            self.range_max = 10
+            self.separate_command = False # put command and value on separate time steps
+            self.flag_errors = False
+            self.mask_outputs = False
+            self.one_hot_encode = False
+            self.many_hot_encode = True
+            # self.input_file = "/amd/home/mammadli/repos/python_parrl/code_samples/data.pickled"
 
 class ControllerParams(Params):
     def __init__(self):
@@ -94,6 +105,7 @@ class ControllerParams(Params):
         self.hidden_dim     = None  #
         self.mem_hei        = None  # set after memory
         self.mem_wid        = None  # set after memory
+        self.depth          = 1  # number of layers
 
 class HeadParams(Params):
     def __init__(self):
@@ -113,7 +125,7 @@ class WriteHeadParams(HeadParams):
 class ReadHeadParams(HeadParams):
     def __init__(self):
         super(ReadHeadParams, self).__init__()
-        if self.circuit_type in ["dnc", "bidnc"]:
+        if self.circuit_type in ["dnc", "bidnc", "fdnc"]:
             self.num_read_modes = None
 
 class MemoryParams(Params):
@@ -155,12 +167,12 @@ class CircuitParams(Params):# settings for network architecture
             self.mem_hei         = 128
             self.mem_wid         = 20
             self.clip_value      = 20.   # clips controller and circuit output values to in between
-        elif self.circuit_type in ["dnc", "bidnc"]:
+        elif self.circuit_type in ["dnc", "bidnc", "fdnc"]:
             self.hidden_dim      = 64
             self.num_write_heads = 1
-            self.num_read_heads  = 4
-            self.mem_hei         = 16
-            self.mem_wid         = 16
+            self.num_read_heads  = 2
+            self.mem_hei         = 20
+            self.mem_wid         = 10
             self.clip_value      = 20.   # clips controller and circuit output values to in between
 
         self.controller_params = ControllerParams()
@@ -186,26 +198,26 @@ class AgentParams(Params):  # hyperparameters for drl agents
                 self.eval_steps     = 50
                 self.prog_freq      = self.eval_freq
                 self.test_nepisodes = 5
-            elif self.circuit_type in ["dnc", "bidnc"]:
+            elif self.circuit_type in ["dnc", "bidnc", "fdnc"]:
                 self.criteria       = nn.BCELoss()
                 self.optim          = optim.RMSprop
 
-                self.steps          = 1000    # max #iterations
-                self.batch_size     = 200 if self.mode != 3 else 1
+                self.steps          = 50000    # max #iterations
+                self.batch_size     = 100 if self.mode != 3 else 1
                 self.early_stop     = None      # max #steps per episode
                 self.clip_grad      = 50.
                 self.lr             = 1e-4
                 self.optim_eps      = 1e-10     # NOTE: we use this setting to be equivalent w/ the default settings in tensorflow
                 self.optim_alpha    = 0.9       # NOTE: only for rmsprop, alpha is the decay in tensorflow, whose default is 0.9
-                self.eval_freq      = 25
-                self.eval_steps     = 5
+                self.eval_freq      = 100
+                self.eval_steps     = 4
                 self.prog_freq      = self.eval_freq
-                self.test_nepisodes = 15
+                self.test_nepisodes = 10
         elif self.agent_type == "empty":
             self.criteria       = nn.BCELoss()
             self.optim          = optim.RMSprop
 
-            self.steps          = 1000    # max #iterations
+            self.steps          = 10000    # max #iterations
             self.batch_size     = 16
             self.early_stop     = None      # max #steps per episode
             self.clip_grad      = 50.

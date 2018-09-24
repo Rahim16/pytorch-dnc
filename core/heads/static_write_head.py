@@ -35,8 +35,8 @@ class StaticWriteHead(StaticHead):
         super(StaticWriteHead, self).forward(hidden_vb, memory_vb)
         self.wl_prev_vb = self.wl_curr_vb
         # access
-        self.erase_vb = F.sigmoid(self.hid_2_erase(hidden_vb)).view(-1, self.num_heads, self.mem_wid)
-        self.add_vb   = F.tanh(self.hid_2_add(hidden_vb)).view(-1, self.num_heads, self.mem_wid)
+        self.erase_vb = torch.sigmoid(self.hid_2_erase(hidden_vb)).view(-1, self.num_heads, self.mem_wid)
+        self.add_vb   = torch.tanh(self.hid_2_add(hidden_vb)).view(-1, self.num_heads, self.mem_wid)
         return self._access(memory_vb)
 
     def _access(self, memory_vb): # write
